@@ -11,6 +11,7 @@ import time
 import random
 import json
 
+
 # 定义常量
 DEBUGGER = True  # 调试模式
 SEND_TIME = 10  # 每投递一个岗位
@@ -190,8 +191,9 @@ class Core:
     last_send_time = time.time()  # 上次发送时间
     last_request_time = time.time()  # 上次请求时间
     info = {}  # 操作信息
+    filter_dict = {}  # 筛选条件映射表
 
-    def __init__(self, name, url_base, url_login, send_amount):
+    def __init__(self, name, url_base, url_login, send_amount, filter_dict):
         # 创建名字
         self.name = name
         # 配置url
@@ -199,6 +201,8 @@ class Core:
         self.url.login = url_login
         # 请求总数
         self.send_amount = send_amount
+        # 筛选条件映射表
+        self.filter_dict = filter_dict
         # 获取简历
         for key, value in Info.resume_profiles.items():
             if self.name in value["platforms"]:
@@ -240,7 +244,9 @@ class Core:
         chrome_options.add_argument("--disable-web-security")
         chrome_options.add_argument("--allow-running-insecure-content")
         chrome_options.add_argument("--reduce-security-for-testing")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-logging", "enable-automation"])
+        chrome_options.add_experimental_option(
+            "excludeSwitches", ["enable-logging", "enable-automation"]
+        )
         chrome_options.add_experimental_option("useAutomationExtension", False)
         # 设置偏好，禁用自动化提示
         prefs = {
@@ -249,24 +255,24 @@ class Core:
             "profile.default_content_setting_values.notifications": 2,
             # 下面的设置对绕过检测很重要
             "excludeSwitches": ["enable-automation"],
-            "useAutomationExtension": False
+            "useAutomationExtension": False,
         }
         chrome_options.add_experimental_option("prefs", prefs)
-        
+
         # 使用随机用户代理
         user_agents = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
         ]
         chrome_options.add_argument(f"--user-agent={random.choice(user_agents)}")
-        
+
         # 使用隐身模式
         chrome_options.add_argument("--incognito")
-        
+
         # 添加新的自动化相关选项
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        
+
         # 添加CDP命令，彻底禁用"Chrome正在被自动化软件控制"的提示
         chrome_options.add_argument("--remote-debugging-port=9222")
         # 添加新的自动化相关选项
@@ -277,16 +283,20 @@ class Core:
 
         # 创建Chrome浏览器实例
         self.driver = webdriver.Chrome(options=chrome_options)
-        
+
         # 核心：先访问空白页面然后执行脚本移除webdriver属性
         self.driver.get("about:blank")
-        
+
         # 立即执行脚本，移除webdriver标志
-        self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
+        self.driver.execute_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
+
         # 执行CDP命令，修改navigator.webdriver标志位
-        self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-            "source": """
+        self.driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": """
                 // 覆盖 webdriver 属性
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => false
@@ -327,7 +337,8 @@ class Core:
                     window.Notification.requestPermission = originalNotification.requestPermission;
                 }
             """
-        })
+            },
+        )
 
     # 获取实际url
     def get_url(self, url_path=""):
@@ -457,12 +468,12 @@ class Core:
     # 所有检测+请求限制
     def detect(self):
         self.page_load_await()
-        
+
         # self.detect_verify()
         # if self.verify_status:
         #     Logger.warn("当前处于人机验证")
         #     return True
-        
+
         # self.detect_login()
         # if not self.login_status:
         #     Logger.warn("当前处于未登录状态")
@@ -626,13 +637,9 @@ class Info:
     DEFAULT_CONFIG = {
         "citys": {"全国": ["全国"]},
         "keywords": ["Python"],  # 需要搜索的职位,会依次投递
-        "industry": [
-            "不限"
-        ],  # 公司行业，只能选三个，相关代码枚举的部分，如果需要其他的需要自己找
-        "experience": [
-            "不限"
-        ],  # 工作经验："应届毕业生", "1年以下", "1-3年", "3-5年", "5-10年", "10年以上"
-        "jobType": "不限",  # 求职类型："全职", "兼职"
+        "industry": ["不限"],  # 公司行业
+        "experience": ["不限"],  # 工作经验
+        "jobType": "不限",  # 求职类型
         "salary": "50K以上",  # 薪资（单选）："3K以下", "3-5K", "5-10K", "10-20K", "20-50K", "50K以上"
         "degree": [
             "不限"

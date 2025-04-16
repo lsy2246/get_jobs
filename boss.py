@@ -18,6 +18,15 @@ class BossCore(base.Core):
             url_base="https://www.zhipin.com/",
             url_login="/web/user/?ka=header-login",
             send_amount=300,
+            filter_dict={
+                "公司行业": "industry",
+                "工作经验": "experience",
+                "求职类型": "jobType",
+                "薪资待遇": "salary",
+                "学历要求": "degree",
+                "公司规模": "scale",
+                "融资阶段": "stage",
+            },
         )
 
     def detect_login(self):
@@ -172,79 +181,72 @@ class BossCore(base.Core):
             )
         )
 
-        # 所有检查
-        if core.detect():
-            self.send()
-            return
-
-        ## 设置筛选标签
-        def get_level_ones():
+        # 筛选函数
+        def set_filter(tag_name, filter_name):
+            if filter_name == "不限":
+                return True
             if core.detect():
-                return
+                return False
+            level_ones_dict = {}
             try:
-                level_ones = self.driver.find_elements(By.CLASS_NAME, "placeholder-text")
-                level_ones_dict = {}
+                level_ones = self.driver.find_elements(
+                    By.CLASS_NAME, "placeholder-text"
+                )
                 for item in level_ones:
                     s = item.find_element(By.XPATH, "./..")
                     box = s.find_element(By.XPATH, "./..")
                     level_ones_dict[item.text] = {}
                     level_ones_dict[item.text]["father"] = box
                     level_ones_dict[item.text]["self"] = item
-                if len(level_ones_dict)!=0:
-                    return level_ones_dict
-                else:
-                    Logger.error("筛选的一级菜单盒子查找失败")
             except Exception as e:
+                Logger.error("筛选的一级菜单盒子查找失败", e)
+            if level_ones_dict == 0:
                 Logger.error("筛选的一级菜单盒子查找失败")
+                return False
+            
 
-
-        # 设置公司行业
-        current_industry_site = 0
-        while current_industry_site < len(self.esumes[current_name]["industry"]):
             try:
-                level_ones_dict = get_level_ones()
-                if level_ones_dict is None: return
-                is_select = False
-                level_one_box = level_ones_dict["公司行业"]["father"]
+                level_one_box = level_ones_dict[tag_name]["father"]
                 level_two_box = level_one_box.find_element(
                     By.CLASS_NAME, "filter-select-dropdown"
                 )
-                if level_two_box is None:
-                    Logger.error("公司行业的二级菜单盒子查找失败")
                 level_twos = level_two_box.find_elements(By.TAG_NAME, "a")
-                if level_twos is None:
-                    Logger.error("公司行业的二级菜单选项查找失败")
-                while not is_select and current_industry_site < len(
-                    self.esumes[current_name]["industry"]
-                ):
-                    for item in level_twos:
-                        tag_text = item.get_attribute("innerText")
-                        if (
-                            tag_text
-                            == self.esumes[current_name]["industry"][
-                                current_industry_site
-                            ]
-                        ):
-                            core.human_move(level_ones_dict["公司行业"]["self"])
-                            core.human_click(item)
-                            is_select = True
+                if len(level_twos) == 0:
+                    level_twos = level_two_box.find_elements(By.TAG_NAME, "li")
+                if len(level_twos) == 0:
+                    Logger.warn(f"筛选的二级菜单列表内容查找失败 {tag_name}")
+                for item in level_twos:
+                    tag_text = item.get_attribute("innerText").strip()
+                    if tag_text == filter_name:
+                        core.human_move(level_ones_dict[tag_name]["self"])
+                        core.human_click(item)
+                        Logger.info(f"设置筛选条件成功 {tag_name}-{filter_name}")
+                        self.request_await()
+                        try:
                             WebDriverWait(self.driver, 10).until(EC.staleness_of(item))
-                            break
-            except Exception as e:
-                Logger.error(
-                    "设置公司行业失败",
-                    e,
-                    {
-                        "industry": self.esumes[current_name]["industry"][
-                            current_industry_site
-                        ]
-                    },
-                )
-            finally:
-                current_industry_site += 1
-        
+                        finally:
+                            return True
+                Logger.info(f"设置筛选条件失败 {tag_name}-{filter_name}")
+            except:
+                Logger.info(f"设置筛选条件失败 {tag_name}-{filter_name}")
 
-        Logger.info("设置公司行业完成")
+        # 筛选
+        for key,value in self.filter_dict.items():
+            data = self.esumes[current_name][value]
+            if isinstance(data, str):
+                if set_filter(key,data) is False:
+                    return
+            elif isinstance(data, list):
+                for name in data:
+                    if set_filter(key,name) is False:
+                        return
+            else:
+                Logger.info("格式错误 {key}")
+        Logger.info("应用筛选标签完成")
+            
+
+
+
         time.sleep(1000)
 
 
